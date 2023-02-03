@@ -1,54 +1,67 @@
+import os
+import random
 import sys
-import argparse
-from io import BytesIO
-# Этот класс поможет нам сделать картинку из потока байт
-
+import pygame
 import requests
-from PIL import Image
 
-# Пусть наше приложение предполагает запуск:
-# python search.py Москва, ул. Ак. Королева, 12
-# Тогда запрос к геокодеру формируется следующим образом:
-parser = argparse.ArgumentParser()
-parser.add_argument("toponym_to_find", nargs='+')
-args = parser.parse_args()
 
-geocoder_api_server = "http://geocode-maps.yandex.ru/1.x/"
-geocoder_params = {
-    "apikey": "40d1649f-0493-4b70-98ba-98533de7710b",
-    "geocode": ' '.join(args.toponym_to_find),
-    "format": "json"}
+def createMap(x, y, z, l):
+    slide = f"http://static-maps.yandex.ru/1.x/?ll={x},{y}&z={z}&l={l}"
+    response = requests.get(slide)
+    if not response:
+        print("Ошибка выполнения запроса:")
+        print(slide)
+        print("Http статус:", response.status_code, "(", response.reason, ")")
+        sys.exit(1)
+    map_file = 'Data/maps/map.png'
+    with open(map_file, "wb") as file:
+        file.write(response.content)
+    return pygame.image.load('Data/maps/map.png')
 
-response = requests.get(geocoder_api_server, params=geocoder_params)
 
-if not response:
-    print('error')
-    sys.exit(1)
-# Преобразуем ответ в json-объект
-json_response = response.json()
-# Получаем первый топоним из ответа геокодера.
-toponym = json_response["response"]["GeoObjectCollection"][
-    "featureMember"][0]["GeoObject"]
-x, y = map(float, toponym['boundedBy']['Envelope']['lowerCorner'].split())
-x1, y1 = map(float, toponym['boundedBy']['Envelope']['upperCorner'].split())
-# Координаты центра топонима:
-toponym_coodrinates = toponym["Point"]["pos"]
-# Долгота и широта:
-toponym_longitude, toponym_lattitude = toponym_coodrinates.split(" ")
-
-delta = "0.005"
-
-# Собираем параметры для запроса к StaticMapsAPI:
-map_params = {
-    "ll": ",".join([toponym_longitude, toponym_lattitude]),
-    "spn": f'{abs(x - x1) * 0.5},{abs(y - y1) * 0.5}',
-    'pt': f'{toponym_longitude},{toponym_lattitude},flag',
-    "l": "map"
-}
-
-map_api_server = "http://static-maps.yandex.ru/1.x/"
-# ... и выполняем запрос
-response = requests.get(map_api_server, params=map_params)
-
-Image.open(BytesIO(
-    response.content)).show()
+# Инициализируем pygame
+pygame.init()
+screen = pygame.display.set_mode((600, 450))
+size = 10
+x, y = 60.2, 60
+delta = 0.821
+l = 'map'
+mapImage = createMap(x, y, size, l)
+pygame.display.flip()
+run = True
+while run:
+    screen.fill(pygame.Color('black'))
+    screen.blit(mapImage, (0, 0))
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            run = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_PAGEUP:
+                size += 1
+                size %= 18
+                delta /= 2
+                mapImage = createMap(x, y, size, l)
+            if event.key == pygame.K_PAGEDOWN:
+                size -= 1
+                size %= 18
+                delta *= 2
+                mapImage = createMap(x, y, size, l)
+            if event.key == pygame.K_UP:
+                if -90 < y + delta < 90:
+                    y += delta
+                mapImage = createMap(x, y, size, l)
+            if event.key == pygame.K_DOWN:
+                if -90 < y - delta < 90:
+                    y -= delta
+                mapImage = createMap(x, y, size, l)
+            if event.key == pygame.K_RIGHT:
+                if -180 < x + delta < 180:
+                    x += delta
+                mapImage = createMap(x, y, size, l)
+            if event.key == pygame.K_LEFT:
+                if -180 < x - delta < 180:
+                    x -= delta
+                mapImage = createMap(x, y, size, l)
+    pygame.display.flip()
+pygame.quit()
+os.remove('Data/maps/map.png')
